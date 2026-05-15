@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -x
 set -euo pipefail
 
 export GROQ_API_KEY="${GROQ_API_KEY:-}"
@@ -108,7 +109,7 @@ if [[ "${added}" -eq 0 ]]; then
   echo "No local .tf files available for Checkov." >&2
   echo '{"check_type":"terraform","results":{"failed_checks":[]}}' >"${WS}/findings.json"
 else
-  "${checkov_cmd[@]}" >"${WS}/findings.json"
+  "${checkov_cmd[@]}" >"${WS}/findings.json" || true
 fi
 
 python3 /app/analyze.py --checkov-output "${WS}/findings.json"
