@@ -9,9 +9,9 @@ WORKDIR /app
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir checkov groq click
 
-COPY opspilot/analyze.py /app/analyze.py
-COPY action/entrypoint.sh /app/entrypoint.sh
-COPY action/format_comment.py /app/format_comment.py
+COPY analyze.py /app/
+COPY entrypoint.sh /app/
+COPY format_comment.py /app/
 
 RUN chmod +x /app/entrypoint.sh
 
