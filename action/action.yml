@@ -1,0 +1,22 @@
+name: OpsPilot Review
+description: Terraform security findings explained. Requires Checkov + Groq API key.
+inputs:
+  groq-api-key:
+    description: Groq API key (store as a secret).
+    required: true
+  checkov-severity:
+    description: Pipe-separated severities for Checkov (e.g. critical|high).
+    required: false
+    default: 'critical|high'
+outputs:
+  findings-json:
+    description: Path to opspilot-results.json in the workspace.
+branding:
+  icon: shield
+  color: blue
+runs:
+  using: docker
+  image: Dockerfile
+  env:
+    GROQ_API_KEY: ${{ inputs.groq-api-key }}
+    GITHUB_TOKEN: ${{ github.token }}
