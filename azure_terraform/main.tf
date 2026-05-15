@@ -148,3 +148,17 @@ resource "aws_s3_bucket" "test" {
   bucket = "my-test-bucket"
   acl    = "public-read"
 }
+
+resource "aws_s3_bucket" "insecure_test" {
+  bucket = "ml-training-data"
+  acl    = "public-read"
+}
+
+resource "aws_db_instance" "main" {
+  identifier        = "prod-db"
+  engine            = "mysql"
+  instance_class    = "db.t3.micro"
+  username          = "admin"
+  password          = "hardcoded-password-123"
+  skip_final_snapshot = true
+}
