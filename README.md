@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: SuryaMadireddy1/Azure_Terraform/action@main
+      - uses: SuryaMadireddy1/opspilot-action/action@main
         with:
           groq-api-key: ${{ secrets.GROQ_API_KEY }}
         env:
