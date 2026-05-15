@@ -13,3 +13,4 @@ jobs:
           groq-api-key: ${{ secrets.GROQ_API_KEY }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
