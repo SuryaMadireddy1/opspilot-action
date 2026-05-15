@@ -1,0 +1,13 @@
+name: OpsPilot
+on: [pull_request]
+permissions:
+  pull-requests: write
+  contents: read
+jobs:
+  opspilot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        with:
+          groq-api-key: ${{ secrets.GROQ_API_KEY }}
