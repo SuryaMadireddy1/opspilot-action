@@ -162,3 +162,17 @@ resource "aws_db_instance" "main" {
   password          = "hardcoded-password-123"
   skip_final_snapshot = true
 }
+
+resource "aws_s3_bucket" "ml_data" {
+  bucket = "ml-training-data"
+  acl    = "public-read"
+}
+
+resource "aws_db_instance" "prod" {
+  identifier          = "prod-db-2"
+  engine              = "mysql"
+  instance_class      = "db.t3.micro"
+  username            = "admin"
+  password            = "hardcoded-password-123"
+  skip_final_snapshot = true
+}
