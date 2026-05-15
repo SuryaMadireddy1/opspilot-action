@@ -144,3 +144,7 @@ output "public_ip_address" {
     value = "${azurerm_linux_virtual_machine.Test-vm.name} : ${data.azurerm_public_ip.Test-ip-data.ip_address}"
 
 }
+resource "aws_s3_bucket" "test" {
+  bucket = "my-test-bucket"
+  acl    = "public-read"
+}
