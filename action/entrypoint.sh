@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export GROQ_API_KEY="${INPUT_GROQ_API_KEY:?Input groq-api-key is required}"
-
+export GROQ_API_KEY="${GROQ_API_KEY:-}"
+if [[ -z "${GROQ_API_KEY}" ]]; then
+  echo "Error: GROQ_API_KEY is required."
+  exit 1
+fi
 WS="${GITHUB_WORKSPACE:-/github/workspace}"
 cd "$WS"
 
