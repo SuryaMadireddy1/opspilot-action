@@ -7,7 +7,7 @@ RUN apt-get update \
 WORKDIR /app
 
 RUN pip install --no-cache-dir --upgrade pip \
-  && pip install --no-cache-dir checkov groq click
+  && pip install --no-cache-dir checkov==3.2.529 groq click
 
 COPY analyze.py /app/
 COPY entrypoint.sh /app/

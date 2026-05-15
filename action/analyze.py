@@ -199,6 +199,9 @@ Be precise. Be literal. Do not guess syntax."""
 def load_checkov_findings(checkov_path: str) -> list[dict[str, Any]]:
     with open(checkov_path, encoding="utf-8") as f:
         data = json.load(f)
+    # checkov 3.x returns a list when multiple --file flags are used
+    if isinstance(data, list):
+        data = data[0] if data else {}
     results = data.get("results") or {}
     failed = results.get("failed_checks") or []
     if not isinstance(failed, list):
