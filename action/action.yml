@@ -17,6 +17,3 @@ branding:
 runs:
   using: docker
   image: Dockerfile
-  env:
-    GROQ_API_KEY: ${{ inputs.groq-api-key }}
-    GITHUB_TOKEN: ${{ github.token }}
