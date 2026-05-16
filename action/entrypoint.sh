@@ -116,7 +116,15 @@ else
 fi
 
 if [[ -f "${WS}/pr-diff.json" ]]; then
+  echo "=== pr-diff.json filenames ==="
+  jq -r '.[].filename' "${WS}/pr-diff.json"
+  echo "=== pr-diff.json patch sample (first file) ==="
+  jq -r '.[0].patch // "(null)"' "${WS}/pr-diff.json"
   python3 /app/parse_diff.py --diff "${WS}/pr-diff.json" --out "${WS}/added-lines.json"
+  echo "=== added-lines.json ==="
+  cat "${WS}/added-lines.json"
+  echo "=== checkov file_path sample (first finding) ==="
+  jq -r 'if type == "array" then .[0] else . end | .results.failed_checks[0].file_path // "(none)"' "${WS}/findings.json"
   python3 /app/analyze.py --checkov-output "${WS}/findings.json" --diff "${WS}/added-lines.json"
 else
   python3 /app/analyze.py --checkov-output "${WS}/findings.json"
