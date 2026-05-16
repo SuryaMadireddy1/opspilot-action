@@ -281,7 +281,7 @@ def _added_lines_for(added_lines: dict[str, list[int]], file_path: str | None) -
     if file_path in added_lines:
         return added_lines[file_path] or None  # empty list from null patch → don't filter
     for key, lines in added_lines.items():
-        if file_path.endswith("/" + key) or file_path == key:
+        if file_path.endswith("/" + key) or key.endswith(file_path.lstrip("/")) or file_path == key:
             return lines or None
     return None
 
