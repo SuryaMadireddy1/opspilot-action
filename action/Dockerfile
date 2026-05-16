@@ -9,9 +9,9 @@ WORKDIR /app
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir checkov==3.2.529 groq openai anthropic click
 
-COPY action/analyze.py /app/analyze.py
-COPY action/entrypoint.sh /app/entrypoint.sh
-COPY action/format_comment.py /app/format_comment.py
+COPY analyze.py /app/analyze.py
+COPY entrypoint.sh /app/entrypoint.sh
+COPY format_comment.py /app/format_comment.py
 
 RUN chmod +x /app/entrypoint.sh
 
