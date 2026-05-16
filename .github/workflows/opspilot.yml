@@ -8,9 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./action
+      - uses: SuryaMadireddy1/opspilot-action/action@feature/inline-suggestions
         with:
           groq-api-key: ${{ secrets.GROQ_API_KEY }}
+          llm-provider: groq
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
