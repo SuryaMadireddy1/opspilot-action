@@ -11,8 +11,10 @@ from typing import Any
 import click
 from groq import Groq
 
+from load_policy import load_policy, PolicyConfig
 
-SYSTEM_PROMPT = (
+
+BASE_SYSTEM_PROMPT = (
     "You are a DevOps engineer explaining infrastructure security findings "
     "to a junior engineer. Be specific, be practical, never be vague. "
     "Respond ONLY in valid JSON, no markdown, no preamble."
@@ -27,14 +29,27 @@ PROVIDER_MODELS = {
 OUTPUT_FILE = "opspilot-results.json"
 
 
-def _chat(provider: str, api_key: str, user_prompt: str) -> str:
+def _build_system_prompt(policy: PolicyConfig) -> str:
+    """Extend the base system prompt with any team-defined custom rules."""
+    if not policy.rules:
+        return BASE_SYSTEM_PROMPT
+    rules_block = "\n".join(f"- {r}" for r in policy.rules)
+    return (
+        BASE_SYSTEM_PROMPT
+        + "\n\nAdditionally, the team has defined these custom rules. "
+        "Flag any violations you detect:\n"
+        + rules_block
+    )
+
+
+def _chat(provider: str, api_key: str, user_prompt: str, system_prompt: str) -> str:
     """Call the chosen LLM provider and return the raw text response."""
     if provider == "groq":
         client = Groq(api_key=api_key)
         completion = client.chat.completions.create(
             model=PROVIDER_MODELS["groq"],
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.2,
@@ -47,7 +62,7 @@ def _chat(provider: str, api_key: str, user_prompt: str) -> str:
         completion = client.chat.completions.create(
             model=PROVIDER_MODELS["openai"],
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.2,
@@ -60,7 +75,7 @@ def _chat(provider: str, api_key: str, user_prompt: str) -> str:
         message = client.messages.create(
             model=PROVIDER_MODELS["anthropic"],
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
             temperature=0.2,
         )
@@ -195,6 +210,7 @@ def analyze_finding(
     api_key: str,
     finding: dict[str, Any],
     tf_file: str | None,
+    system_prompt: str = BASE_SYSTEM_PROMPT,
 ) -> dict[str, Any]:
     check_id = str(finding.get("check_id") or "")
     check_name = str(finding.get("check_name") or "")
@@ -227,7 +243,7 @@ Common fixes:
 - Open security group → cidr_blocks = ["10.0.0.0/8"] instead of ["0.0.0.0/0"]
 
 Be precise. Be literal. Do not guess syntax."""
-    raw_content = _chat(provider, api_key, user_prompt)
+    raw_content = _chat(provider, api_key, user_prompt, system_prompt)
     parsed = parse_llm_json(raw_content)
     return {
         "check_id": check_id,
@@ -358,6 +374,11 @@ def main(checkov_output: str | None, tf_file: str | None, diff_path: str | None)
             )
         raise SystemExit(1)
 
+    policy = load_policy(os.environ.get("GITHUB_WORKSPACE"))
+    click.echo(f"Policy loaded: {len(policy.rules)} custom rule(s), {len(policy.ignore)} ignored check(s)")
+    ignore_set = {c.upper() for c in policy.ignore}
+    system_prompt = _build_system_prompt(policy)
+
     findings = load_checkov_findings(json_path)
 
     added_lines: dict[str, list[int]] = {}
@@ -370,12 +391,16 @@ def main(checkov_output: str | None, tf_file: str | None, diff_path: str | None)
 
     results: list[dict[str, Any]] = []
     suppressed = 0
+    ignored = 0
     for finding in findings:
+        if ignore_set and str(finding.get("check_id") or "").upper() in ignore_set:
+            ignored += 1
+            continue
         if added_lines and not _in_diff(finding, added_lines):
             suppressed += 1
             continue
         try:
-            row = analyze_finding(provider, api_key, finding, tf_file)
+            row = analyze_finding(provider, api_key, finding, tf_file, system_prompt)
             results.append(row)
         except json.JSONDecodeError as e:
             click.echo(
@@ -397,6 +422,8 @@ def main(checkov_output: str | None, tf_file: str | None, diff_path: str | None)
         json.dump(results, f, indent=2)
         f.write("\n")
 
+    if ignored:
+        click.echo(f"{ignored} finding(s) skipped (policy ignore list)")
     if suppressed:
         click.echo(f"{suppressed} finding(s) suppressed (pre-existing, not in PR diff)")
     click.echo(f"Wrote {len(results)} result(s) to {out_path}")

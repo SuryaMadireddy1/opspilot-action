@@ -1,0 +1,15 @@
+# OpsPilot team policy file
+# Place this file in your repo root to customize OpsPilot behavior.
+#
+# rules:  Custom rules appended to the LLM system prompt.
+#         OpsPilot will flag violations it detects in each finding.
+#
+# ignore: Checkov check IDs to skip entirely (no LLM call, no comment).
+
+rules:
+  - "All RDS instances must have deletion_protection = true"
+  - "S3 buckets storing sensitive data must have versioning enabled"
+
+ignore:
+  - CKV_AWS_144  # cross-region replication not required
+  - CKV_AWS_157  # Multi-AZ handled at infrastructure level

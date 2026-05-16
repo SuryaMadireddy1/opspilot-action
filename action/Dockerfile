@@ -13,6 +13,7 @@ COPY analyze.py /app/analyze.py
 COPY entrypoint.sh /app/entrypoint.sh
 COPY format_comment.py /app/format_comment.py
 COPY parse_diff.py /app/parse_diff.py
+COPY load_policy.py /app/load_policy.py
 
 RUN chmod +x /app/entrypoint.sh
 
