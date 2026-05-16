@@ -176,3 +176,8 @@ resource "aws_db_instance" "prod" {
   password            = "hardcoded-password-123"
   skip_final_snapshot = true
 }
+
+resource "aws_s3_bucket" "provider_test" {
+  bucket = "provider-test-bucket"
+  acl    = "public-read"
+}
