@@ -41,17 +41,21 @@ post_comment() {
 
 list_pr_tf_files() {
   local page=1
+  local combined="[]"
   while true; do
-    local url resp count
+    local url resp count filtered
     url="${API_URL}/repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/files?per_page=100&page=${page}"
     resp="$(curl -sS -f -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/vnd.github+json" "${url}")"
     count="$(echo "${resp}" | jq 'length')"
     if [[ "${count}" == "0" ]]; then
       break
     fi
-    echo "${resp}" | jq -r '.[] | select(.filename|test("\\.tf$")) | select(.status != "removed") | .filename'
+    filtered="$(echo "${resp}" | jq '[.[] | select(.filename|test("\\.tf$")) | select(.status != "removed") | {filename, patch}]')"
+    combined="$(printf '%s\n%s' "${combined}" "${filtered}" | jq -s '.[0] + .[1]')"
     page=$((page + 1))
   done
+  printf '%s' "${combined}" > "${WS}/pr-diff.json"
+  printf '%s' "${combined}" | jq -r '.[].filename'
 }
 
 CHECKOV_EXTRA=()
@@ -111,7 +115,12 @@ else
   "${checkov_cmd[@]}" >"${WS}/findings.json" || true
 fi
 
-python3 /app/analyze.py --checkov-output "${WS}/findings.json"
+if [[ -f "${WS}/pr-diff.json" ]]; then
+  python3 /app/parse_diff.py --diff "${WS}/pr-diff.json" --out "${WS}/added-lines.json"
+  python3 /app/analyze.py --checkov-output "${WS}/findings.json" --diff "${WS}/added-lines.json"
+else
+  python3 /app/analyze.py --checkov-output "${WS}/findings.json"
+fi
 
 python3 /app/format_comment.py "${WS}/opspilot-results.json" >/tmp/opspilot-comment.md
 post_comment /tmp/opspilot-comment.md || {

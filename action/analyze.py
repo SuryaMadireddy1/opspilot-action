@@ -274,6 +274,31 @@ def print_summary_table(rows: list[dict[str, Any]]) -> None:
             click.echo(sep.join("-" * widths[i] for i in range(4)))
 
 
+def _added_lines_for(added_lines: dict[str, list[int]], file_path: str | None) -> list[int] | None:
+    """Return added lines for file_path, or None if unknown (caller should not filter)."""
+    if not file_path or not added_lines:
+        return None
+    if file_path in added_lines:
+        return added_lines[file_path] or None  # empty list from null patch → don't filter
+    for key, lines in added_lines.items():
+        if file_path.endswith("/" + key) or key.endswith(file_path.lstrip("/")) or file_path == key:
+            return lines or None
+    return None
+
+
+def _in_diff(finding: dict[str, Any], added_lines: dict[str, list[int]]) -> bool:
+    """True if the finding's line range overlaps added lines (or if diff data is unavailable)."""
+    lines = _added_lines_for(added_lines, finding.get("file_path"))
+    if lines is None:
+        return True  # no diff data → pass through
+    file_line_range = finding.get("file_line_range")
+    if not file_line_range or len(file_line_range) < 2:
+        return True  # no range info → pass through
+    added_set = set(lines)
+    start, end = int(file_line_range[0]), int(file_line_range[-1])
+    return any(ln in added_set for ln in range(start, end + 1))
+
+
 @click.command()
 @click.option(
     "--checkov-output",
@@ -289,7 +314,14 @@ def print_summary_table(rows: list[dict[str, Any]]) -> None:
     default=None,
     help="Fallback Terraform file to enrich missing code_block excerpts.",
 )
-def main(checkov_output: str | None, tf_file: str | None) -> None:
+@click.option(
+    "--diff",
+    "diff_path",
+    type=click.Path(dir_okay=False, path_type=str),
+    default=None,
+    help="Path to added-lines.json from parse_diff.py. Filters findings to PR diff only.",
+)
+def main(checkov_output: str | None, tf_file: str | None, diff_path: str | None) -> None:
     provider = (os.environ.get("INPUT_LLM_PROVIDER") or "groq").strip().lower()
 
     key_env = {
@@ -327,10 +359,21 @@ def main(checkov_output: str | None, tf_file: str | None) -> None:
         raise SystemExit(1)
 
     findings = load_checkov_findings(json_path)
+
+    added_lines: dict[str, list[int]] = {}
+    if diff_path and os.path.isfile(diff_path):
+        with open(diff_path, encoding="utf-8") as f:
+            added_lines = json.load(f)
+        click.echo(f"Diff filter active: {len(added_lines)} file(s) in PR diff")
+
     click.echo(f"Provider: {provider} / Model: {PROVIDER_MODELS[provider]}")
 
     results: list[dict[str, Any]] = []
+    suppressed = 0
     for finding in findings:
+        if added_lines and not _in_diff(finding, added_lines):
+            suppressed += 1
+            continue
         try:
             row = analyze_finding(provider, api_key, finding, tf_file)
             results.append(row)
@@ -354,6 +397,8 @@ def main(checkov_output: str | None, tf_file: str | None) -> None:
         json.dump(results, f, indent=2)
         f.write("\n")
 
+    if suppressed:
+        click.echo(f"{suppressed} finding(s) suppressed (pre-existing, not in PR diff)")
     click.echo(f"Wrote {len(results)} result(s) to {out_path}")
     if results:
         print_summary_table(results)
