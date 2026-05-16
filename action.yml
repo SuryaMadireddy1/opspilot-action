@@ -1,9 +1,19 @@
 name: OpsPilot Review
 description: Terraform security findings explained. Requires Checkov + Groq API key.
 inputs:
+  llm-provider:
+    description: "LLM provider to use: groq (default), openai, anthropic"
+    required: false
+    default: 'groq'
   groq-api-key:
-    description: Groq API key (store as a secret).
-    required: true
+    description: Groq API key (required if llm-provider is groq).
+    required: false
+  openai-api-key:
+    description: OpenAI API key (required if llm-provider is openai).
+    required: false
+  anthropic-api-key:
+    description: Anthropic API key (required if llm-provider is anthropic).
+    required: false
   checkov-severity:
     description: Pipe-separated severities for Checkov (e.g. critical|high).
     required: false

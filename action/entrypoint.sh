@@ -3,10 +3,9 @@ set -x
 set -euo pipefail
 
 export GROQ_API_KEY="${GROQ_API_KEY:-}"
-if [[ -z "${GROQ_API_KEY}" ]]; then
-  echo "Error: GROQ_API_KEY is required."
-  exit 1
-fi
+export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+export INPUT_LLM_PROVIDER="${INPUT_LLM_PROVIDER:-groq}"
 WS="${GITHUB_WORKSPACE:-/github/workspace}"
 cd "$WS"
 

@@ -18,8 +18,55 @@ SYSTEM_PROMPT = (
     "Respond ONLY in valid JSON, no markdown, no preamble."
 )
 
-MODEL = "llama-3.3-70b-versatile"
+PROVIDER_MODELS = {
+    "groq": "llama-3.3-70b-versatile",
+    "openai": "gpt-4o-mini",
+    "anthropic": "claude-haiku-4-5-20251001",
+}
+
 OUTPUT_FILE = "opspilot-results.json"
+
+
+def _chat(provider: str, api_key: str, user_prompt: str) -> str:
+    """Call the chosen LLM provider and return the raw text response."""
+    if provider == "groq":
+        client = Groq(api_key=api_key)
+        completion = client.chat.completions.create(
+            model=PROVIDER_MODELS["groq"],
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+        return (completion.choices[0].message.content or "").strip()
+
+    if provider == "openai":
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        completion = client.chat.completions.create(
+            model=PROVIDER_MODELS["openai"],
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+        return (completion.choices[0].message.content or "").strip()
+
+    if provider == "anthropic":
+        import anthropic as anthropic_sdk
+        client = anthropic_sdk.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model=PROVIDER_MODELS["anthropic"],
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_prompt}],
+            temperature=0.2,
+        )
+        return (message.content[0].text or "").strip()
+
+    raise ValueError(f"Unknown provider: {provider!r}. Choose groq, openai, or anthropic.")
 
 
 def format_code_block(code_block: Any) -> str:
@@ -143,7 +190,12 @@ def parse_llm_json(content: str) -> dict[str, Any]:
     return json.loads(cleaned)
 
 
-def analyze_finding(client: Groq, finding: dict[str, Any], tf_file: str | None) -> dict[str, Any]:
+def analyze_finding(
+    provider: str,
+    api_key: str,
+    finding: dict[str, Any],
+    tf_file: str | None,
+) -> dict[str, Any]:
     check_id = str(finding.get("check_id") or "")
     check_name = str(finding.get("check_name") or "")
     resource = str(finding.get("resource") or "")
@@ -175,16 +227,7 @@ Common fixes:
 - Open security group → cidr_blocks = ["10.0.0.0/8"] instead of ["0.0.0.0/0"]
 
 Be precise. Be literal. Do not guess syntax."""
-    completion = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
-    )
-    message = completion.choices[0].message
-    raw_content = (message.content or "").strip()
+    raw_content = _chat(provider, api_key, user_prompt)
     parsed = parse_llm_json(raw_content)
     return {
         "check_id": check_id,
@@ -247,9 +290,26 @@ def print_summary_table(rows: list[dict[str, Any]]) -> None:
     help="Fallback Terraform file to enrich missing code_block excerpts.",
 )
 def main(checkov_output: str | None, tf_file: str | None) -> None:
-    api_key = os.environ.get("GROQ_API_KEY")
+    provider = (os.environ.get("INPUT_LLM_PROVIDER") or "groq").strip().lower()
+
+    key_env = {
+        "groq": "GROQ_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+    }
+    if provider not in key_env:
+        click.echo(
+            f"error: unknown llm-provider {provider!r}. Choose groq, openai, or anthropic.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    api_key = os.environ.get(key_env[provider]) or ""
     if not api_key:
-        click.echo("error: GROQ_API_KEY is not set in the environment.", err=True)
+        click.echo(
+            f"error: {key_env[provider]} is not set (required for provider={provider}).",
+            err=True,
+        )
         raise SystemExit(1)
 
     json_path = resolve_checkov_json_path(checkov_output, tf_file)
@@ -267,12 +327,12 @@ def main(checkov_output: str | None, tf_file: str | None) -> None:
         raise SystemExit(1)
 
     findings = load_checkov_findings(json_path)
-    client = Groq(api_key=api_key)
+    click.echo(f"Provider: {provider} / Model: {PROVIDER_MODELS[provider]}")
 
     results: list[dict[str, Any]] = []
     for finding in findings:
         try:
-            row = analyze_finding(client, finding, tf_file)
+            row = analyze_finding(provider, api_key, finding, tf_file)
             results.append(row)
         except json.JSONDecodeError as e:
             click.echo(
@@ -283,7 +343,7 @@ def main(checkov_output: str | None, tf_file: str | None) -> None:
             continue
         except Exception as e:  # noqa: BLE001 - surface API/SDK errors per finding
             click.echo(
-                f"warning: Groq API error for {finding.get('check_id')} / "
+                f"warning: {provider} API error for {finding.get('check_id')} / "
                 f"{finding.get('resource')}: {e}. Skipping.",
                 err=True,
             )
