@@ -13,3 +13,4 @@ rules:
 ignore:
   - CKV_AWS_144  # cross-region replication not required
   - CKV_AWS_157  # Multi-AZ handled at infrastructure level
+
