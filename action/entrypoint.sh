@@ -29,14 +29,48 @@ post_comment() {
     echo "No pull request number detected; skipping PR comment." >&2
     return 0
   fi
-  jq -n --rawfile body "$body_file" '{body: $body}' \
-    | curl -sS -f \
-      -X POST \
+
+  local existing_id=""
+  local page=1
+  while true; do
+    local resp count
+    resp="$(curl -sS -f \
       -H "Authorization: Bearer ${TOKEN}" \
       -H "Accept: application/vnd.github+json" \
       -H "X-GitHub-Api-Version: 2022-11-28" \
-      "${API_URL}/repos/${OWNER}/${REPO}/issues/${PR_NUMBER}/comments" \
-      -d @- >/dev/null
+      "${API_URL}/repos/${OWNER}/${REPO}/issues/${PR_NUMBER}/comments?per_page=100&page=${page}")"
+    count="$(printf '%s' "${resp}" | jq 'length')"
+    if [[ "${count}" == "0" ]]; then
+      break
+    fi
+    existing_id="$(printf '%s' "${resp}" | jq -r '
+      .[] | select(
+        (.user.login == "github-actions[bot]") and
+        (.body | startswith("## OpsPilot Review"))
+      ) | .id' | head -1)"
+    [[ -n "${existing_id}" ]] && break
+    page=$((page + 1))
+  done
+
+  if [[ -n "${existing_id}" ]]; then
+    jq -n --rawfile body "$body_file" '{body: $body}' \
+      | curl -sS -f \
+        -X PATCH \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "${API_URL}/repos/${OWNER}/${REPO}/issues/comments/${existing_id}" \
+        -d @- >/dev/null
+  else
+    jq -n --rawfile body "$body_file" '{body: $body}' \
+      | curl -sS -f \
+        -X POST \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "${API_URL}/repos/${OWNER}/${REPO}/issues/${PR_NUMBER}/comments" \
+        -d @- >/dev/null
+  fi
 }
 
 list_pr_tf_files() {
