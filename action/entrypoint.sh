@@ -6,6 +6,7 @@ export GROQ_API_KEY="${GROQ_API_KEY:-}"
 export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 export INPUT_LLM_PROVIDER="${INPUT_LLM_PROVIDER:-groq}"
+FAIL_ON_FINDINGS="${INPUT_FAIL_ON_FINDINGS:-false}"
 WS="${GITHUB_WORKSPACE:-/github/workspace}"
 cd "$WS"
 
@@ -163,4 +164,12 @@ post_comment /tmp/opspilot-comment.md || {
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "findings-json=${WS}/opspilot-results.json" >>"${GITHUB_OUTPUT}"
+fi
+
+if [[ "${FAIL_ON_FINDINGS}" == "true" ]]; then
+  critical_count=$(jq '[.[] | select(.severity == "critical")] | length' "${WS}/opspilot-results.json")
+  if [[ "${critical_count}" -gt 0 ]]; then
+    echo "OpsPilot: ${critical_count} critical finding(s) found. Failing as configured." >&2
+    exit 1
+  fi
 fi

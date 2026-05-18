@@ -18,6 +18,10 @@ inputs:
     description: "Pipe-separated Checkov severities to filter on (e.g. critical|high). Leave empty (default) to run all checks — most Checkov checks have null severity and would be silently excluded if this is set."
     required: false
     default: ''
+  fail-on-findings:
+    description: "Exit non-zero if critical findings are found. Set to 'true' to block merges."
+    required: false
+    default: 'false'
 outputs:
   findings-json:
     description: Path to opspilot-results.json in the workspace.
