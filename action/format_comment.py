@@ -72,6 +72,19 @@ def main() -> None:
     other = buckets["other"]
 
     total = len(rows)
+
+    if total == 0:
+        sys.stdout.write(
+            "## OpsPilot Review ✅\n"
+            "\n"
+            "No security issues found in the changed Terraform files.\n"
+            "\n"
+            "---\n"
+            "*OpsPilot reviewed your PR and found nothing to flag. "
+            "OpsPilot is solo-maintained. See [docs/limitations.md](docs/limitations.md)*\n"
+        )
+        return
+
     y, z, w, o = len(crit), len(high), len(info), len(other)
     parts: list[str] = []
     parts.append("## OpsPilot Review 🤖")
@@ -108,13 +121,9 @@ def main() -> None:
     section("🔵", "Info", info, False)
     section("⚪", "Other", other, False)
 
-    if total == 0:
-        parts.append("_No Terraform security findings from Checkov for changed `.tf` files in this PR._")
-        parts.append("")
-
     parts.append("---")
     parts.append("")
-    parts.append("OpsPilot is solo-maintained. See docs/limitations.md")
+    parts.append("OpsPilot is solo-maintained. See [docs/limitations.md](docs/limitations.md)")
 
     sys.stdout.write("\n".join(parts).rstrip() + "\n")
 
