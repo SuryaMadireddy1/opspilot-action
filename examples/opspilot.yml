@@ -1,3 +1,4 @@
+# Example workflow — copy this to your repo's .github/workflows/ directory
 name: OpsPilot
 on: [pull_request]
 permissions:
@@ -8,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./action
+      - uses: SuryaMadireddy1/opspilot-action/action@v1.3.0
         with:
           groq-api-key: ${{ secrets.GROQ_API_KEY }}
         env:
