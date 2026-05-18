@@ -6,12 +6,28 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from typing import Any
 
 import click
 from groq import Groq
 
 from load_policy import load_policy, PolicyConfig
+
+
+BACKOFF_SECONDS = [5, 15, 45]
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "429" in msg or "rate_limit" in msg or "rate limit" in msg
+
+
+def _parse_retry_after(msg: str) -> int | None:
+    m = re.search(r"try again in (\d+(?:\.\d+)?)\s*s", msg, re.IGNORECASE)
+    if m:
+        return int(float(m.group(1))) + 1
+    return None
 
 
 BASE_SYSTEM_PROMPT = (
@@ -42,7 +58,7 @@ def _build_system_prompt(policy: PolicyConfig) -> str:
     )
 
 
-def _chat(provider: str, api_key: str, user_prompt: str, system_prompt: str) -> str:
+def _call_provider(provider: str, api_key: str, user_prompt: str, system_prompt: str) -> str:
     """Call the chosen LLM provider and return the raw text response."""
     if provider == "groq":
         client = Groq(api_key=api_key)
@@ -82,6 +98,34 @@ def _chat(provider: str, api_key: str, user_prompt: str, system_prompt: str) -> 
         return (message.content[0].text or "").strip()
 
     raise ValueError(f"Unknown provider: {provider!r}. Choose groq, openai, or anthropic.")
+
+
+def _chat(provider: str, api_key: str, user_prompt: str, system_prompt: str) -> str:
+    """Retry wrapper around _call_provider with exponential backoff on rate limits."""
+    last_exc: Exception | None = None
+    for attempt in range(len(BACKOFF_SECONDS) + 1):
+        try:
+            return _call_provider(provider, api_key, user_prompt, system_prompt)
+        except Exception as exc:
+            if not _is_rate_limit(exc):
+                raise
+            last_exc = exc
+            if attempt == len(BACKOFF_SECONDS):
+                break
+            retry_after = _parse_retry_after(str(exc))
+            if retry_after is not None and retry_after > 60:
+                raise RuntimeError(
+                    f"rate limit retry-after {retry_after}s exceeds 60s limit; skipping finding"
+                ) from exc
+            wait = retry_after if retry_after is not None else BACKOFF_SECONDS[attempt]
+            click.echo(
+                f"rate limit hit, waiting {wait}s before retry {attempt + 1}/{len(BACKOFF_SECONDS)}",
+                err=True,
+            )
+            time.sleep(wait)
+    raise RuntimeError(
+        f"rate limit persisted after {len(BACKOFF_SECONDS)} retries; skipping finding"
+    ) from last_exc
 
 
 def format_code_block(code_block: Any) -> str:
@@ -268,6 +312,15 @@ def load_checkov_findings(checkov_path: str) -> list[dict[str, Any]]:
     return [x for x in failed if isinstance(x, dict)]
 
 
+_SEVERITY_ORDER = {"critical": 0, "high": 1, "warning": 2, "info": 3}
+
+
+def _severity_rank(finding: dict[str, Any]) -> int:
+    """Lower number = higher priority. Unknown severities sort last."""
+    sev = str(finding.get("severity") or "").lower()
+    return _SEVERITY_ORDER.get(sev, 99)
+
+
 def print_summary_table(rows: list[dict[str, Any]]) -> None:
     headers = ("resource", "check_id", "severity", "explanation")
     cells: list[list[str]] = [list(headers)]
@@ -337,7 +390,15 @@ def _in_diff(finding: dict[str, Any], added_lines: dict[str, list[int]]) -> bool
     default=None,
     help="Path to added-lines.json from parse_diff.py. Filters findings to PR diff only.",
 )
-def main(checkov_output: str | None, tf_file: str | None, diff_path: str | None) -> None:
+@click.option(
+    "--max-findings",
+    "max_findings",
+    type=int,
+    default=30,
+    show_default=True,
+    help="Maximum number of findings to send to the LLM. Truncates by severity (critical first).",
+)
+def main(checkov_output: str | None, tf_file: str | None, diff_path: str | None, max_findings: int) -> None:
     provider = (os.environ.get("INPUT_LLM_PROVIDER") or "groq").strip().lower()
 
     key_env = {
@@ -389,7 +450,7 @@ def main(checkov_output: str | None, tf_file: str | None, diff_path: str | None)
 
     click.echo(f"Provider: {provider} / Model: {PROVIDER_MODELS[provider]}")
 
-    results: list[dict[str, Any]] = []
+    filtered: list[dict[str, Any]] = []
     suppressed = 0
     ignored = 0
     for finding in findings:
@@ -399,6 +460,17 @@ def main(checkov_output: str | None, tf_file: str | None, diff_path: str | None)
         if added_lines and not _in_diff(finding, added_lines):
             suppressed += 1
             continue
+        filtered.append(finding)
+
+    filtered.sort(key=_severity_rank)
+    truncated = 0
+    if len(filtered) > max_findings:
+        truncated = len(filtered) - max_findings
+        filtered = filtered[:max_findings]
+        click.echo(f"{len(filtered) + truncated} findings truncated to {max_findings} (limit)")
+
+    results: list[dict[str, Any]] = []
+    for finding in filtered:
         try:
             row = analyze_finding(provider, api_key, finding, tf_file, system_prompt)
             results.append(row)
