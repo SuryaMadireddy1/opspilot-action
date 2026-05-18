@@ -15,9 +15,9 @@ inputs:
     description: Anthropic API key (required if llm-provider is anthropic).
     required: false
   checkov-severity:
-    description: Pipe-separated severities for Checkov (e.g. critical|high).
+    description: "Pipe-separated Checkov severities to filter on (e.g. critical|high). Leave empty (default) to run all checks — most Checkov checks have null severity and would be silently excluded if this is set."
     required: false
-    default: 'critical|high'
+    default: ''
 outputs:
   findings-json:
     description: Path to opspilot-results.json in the workspace.
